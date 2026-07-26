@@ -1,6 +1,6 @@
 # Title: Time Series Forecasting in Python
 # Author: Alexander Zakrzeski
-# Date: July 19, 2026
+# Date: July 26, 2026
 
 import polars as pl
 
@@ -8,6 +8,8 @@ import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 
 from statsmodels.tsa.seasonal import STL
+
+from sklearn.metrics import mean_absolute_percentage_error
 
 # Part 1. Time Waits for No One
 
@@ -18,8 +20,9 @@ jj = (
     pl.read_parquet("Johnson-And-Johnson-Quarterly-EPS.parquet")
       .rename({"data": "eps"}) 
       .with_columns(pl.col("date").str.to_date("%Y-%m-%d"))
-      .with_columns(pl.col("date").dt.year().alias("year")) 
-      .select("date", "year", "eps")
+      .with_columns(pl.col("date").dt.year().alias("year"),
+                    pl.col("date").dt.quarter().alias("quarter")) 
+      .select("date", "year", "quarter", "eps")
     )
 
 # Create a plot visualizing the time series
@@ -52,6 +55,37 @@ plt.show()
 
 # 1.2 A Naive Prediction of the Future
 
+# Create the training and test sets and generate the naive seasonal forecast
+jj_train1 = jj.filter(pl.col("year") <= 1979)
+
+jj_test1 = (
+    jj.filter(pl.col("year") == 1980)
+      .join(jj_train1.filter(pl.col("year") == 1979)
+                     .rename({"eps": "prediction"})
+                     .select("quarter", "prediction"), 
+            on = "quarter", how = "left")
+    )
+
+# Calculate the mean absolute percentage error
+print(f"{mean_absolute_percentage_error(jj_test1["eps"], 
+                                        jj_test1["prediction"]):.2%}")
+
+# Create a plot comparing the actual and forecasted values
+fig, ax = plt.subplots()
+ax.plot(jj_train1["date"], jj_train1["eps"], "g-.", label = "Train")
+ax.plot(jj_test1["date"], jj_test1["eps"], "b-", label = "Test")
+ax.plot(jj_test1["date"], jj_test1["prediction"], "r--", label = "Predicted")
+ax.set_title("Naive Seasonal Forecast of Johnson & Johnson EPS")
+ax.set_xlabel("Date")
+ax.set_ylabel("Earnings per share (USD)")
+ax.axvspan(jj_test1["date"].min(), jj_test1["date"].max(), color = "#808080", 
+           alpha = 0.2)
+ax.xaxis.set_major_locator(mdates.YearLocator(2))
+ax.legend(loc = "upper left")
+plt.tight_layout()
+plt.show()
+
+# 1.3 Going on a Random Walk
 
 
 os.chdir("/Users/azak13/Desktop/Time-Series-In-Python/Data")
